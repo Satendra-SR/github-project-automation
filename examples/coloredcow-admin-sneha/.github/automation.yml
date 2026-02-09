@@ -1,0 +1,36 @@
+issue_repo:
+  owner: coloredcow-admin
+  name: sneha-lms
+project:
+  owner: coloredcow-admin
+  name: SNEHA LMS
+  status_field: Status
+  status_order:
+    - Backlog
+    - Ready
+    - On Hold
+    - In Progress
+    - In review
+    - QA
+    - Completed
+labels:
+  ready_for_review: Ready For Review
+  ready_for_review_any:
+    - Ready For Review
+    - "status: ready for review"
+rules:
+  - on:
+      event: pull_request
+      actions: [opened, synchronize]
+    do:
+      - ensure_issue_in_project: true
+      - ensure_status_at_least: In Progress
+      - audit_on_change: true
+  - on:
+      event: pull_request
+      actions: [review_requested, ready_for_review]
+    do:
+      - add_pr_label_if_missing: Ready For Review
+      - ensure_issue_in_project: true
+      - ensure_status_at_least: In review
+      - audit_on_change: true

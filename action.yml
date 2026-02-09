@@ -1,0 +1,27 @@
+name: "GitHub Project Automation"
+description: "Cross-repo PR/Issue/Project V2 automation"
+author: "satendra-sr"
+inputs:
+  token:
+    description: "Token with cross-repo + Projects V2 permissions"
+    required: true
+  config-path:
+    description: "Path to automation config file"
+    required: false
+    default: ".github/automation.yml"
+  dry-run:
+    description: "If true, no writes are performed"
+    required: false
+    default: "false"
+outputs:
+  did_label_change:
+    description: "Whether a PR label was added"
+  did_status_change:
+    description: "Whether the Issue status was changed"
+  issue_number:
+    description: "Target issue number"
+  target_status:
+    description: "Target status requested by rule"
+runs:
+  using: "node24"
+  main: "dist/index.js"

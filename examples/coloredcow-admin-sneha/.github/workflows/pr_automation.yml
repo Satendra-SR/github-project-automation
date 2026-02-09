@@ -1,0 +1,20 @@
+name: PR Automation
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, review_requested]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  pr-automation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run automation
+        uses: satendra-sr/github-project-automation@v1
+        with:
+          token: ${{ secrets.GH_AUTOMATION_TOKEN }}
+          config-path: .github/automation.yml
