@@ -17,6 +17,19 @@ Reusable GitHub Action to automate cross-repo PR + Issue + Projects V2 workflows
 
 ## Usage
 
+## Setup (Consuming Repo)
+1. Create a fine-grained PAT (recommended):
+   - Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens
+   - Resource owner: your organization or user
+   - Repository access: only select the PR repo and the Issue/Project repo
+   - Permissions:
+     - Pull requests: Read & write (PR repo)
+     - Issues: Read & write (Issue repo)
+     - Projects: Read & write (org/user Projects V2)
+2. Add the token as a secret in the PR repo:
+   - Secret name: `GH_AUTOMATION_TOKEN`
+3. Add `.github/automation.yml` and `.github/workflows/pr_automation.yml` (examples below).
+
 ### Workflow example (coloredcow-admin/sneha)
 ```yaml
 name: PR Automation
@@ -98,6 +111,7 @@ Required in PR body:
 ```
 Targets: coloredcow-admin/sneha-lms#123
 ```
+This format is intentionally strict. The action will only accept a `Targets` line that matches the repo configured under `issue_repo` in `.github/automation.yml`. This keeps cross-repo automation explicit and safe.
 Supported whitespace variants:
 - `Targets:coloredcow-admin/sneha-lms#123`
 - `Targets: coloredcow-admin/sneha-lms #123`
