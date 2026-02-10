@@ -55,6 +55,7 @@ jobs:
   pr-automation:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Run automation
         uses: satendra-sr/github-project-automation@v1
         with:
