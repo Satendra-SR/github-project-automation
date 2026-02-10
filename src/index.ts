@@ -73,7 +73,9 @@ async function run(): Promise<void> {
     if (!targetResult.target) {
       const body =
         "⚠️ Automation: Missing Targets line.\n" +
-        `Please add: Targets: ${config.issue_repo.owner}/${config.issue_repo.name}#<issue_id>`;
+        `Please add one of:\n` +
+        `- Targets: ${config.issue_repo.owner}/${config.issue_repo.name}#<issue_id>\n` +
+        `- Targets: #<issue_id> (if issues are in the same repo)`;
 
       await commentOnPr(octokit, prContext, body, dryRun);
       logger.warn(`Targets parsing failed: ${targetResult.error}`);

@@ -26268,18 +26268,20 @@ function buildActionPlan(config, eventName, action) {
 }
 
 // src/github/targets.ts
-var TARGETS_REGEX = /^\s*Targets:\s*([^\s#/]+)\/([^\s#]+)\s*#\s*(\d+)\s*$/im;
+var TARGETS_FULL_REGEX = /^\s*Targets:\s*([^\s#/]+)\/([^\s#]+)\s*#\s*(\d+)\s*$/im;
+var TARGETS_SHORT_REGEX = /^\s*Targets:\s*#\s*(\d+)\s*$/im;
 function parseTargets(body, expectedOwner, expectedRepo) {
   if (!body) {
     return { error: "PR body is empty" };
   }
-  const match = body.match(TARGETS_REGEX);
-  if (!match) {
+  const fullMatch = body.match(TARGETS_FULL_REGEX);
+  const shortMatch = body.match(TARGETS_SHORT_REGEX);
+  if (!fullMatch && !shortMatch) {
     return { error: "Missing Targets line" };
   }
-  const owner = match[1];
-  const repo = match[2];
-  const number = Number(match[3]);
+  const owner = fullMatch ? fullMatch[1] : expectedOwner;
+  const repo = fullMatch ? fullMatch[2] : expectedRepo;
+  const number = Number(fullMatch ? fullMatch[3] : shortMatch?.[1]);
   if (!Number.isInteger(number) || number <= 0) {
     return { error: "Invalid issue number in Targets line" };
   }
@@ -26729,7 +26731,9 @@ async function run() {
     const targetResult = parseTargets(pr.body, config.issue_repo.owner, config.issue_repo.name);
     if (!targetResult.target) {
       const body = `\u26A0\uFE0F Automation: Missing Targets line.
-Please add: Targets: ${config.issue_repo.owner}/${config.issue_repo.name}#<issue_id>`;
+Please add one of:
+- Targets: ${config.issue_repo.owner}/${config.issue_repo.name}#<issue_id>
+- Targets: #<issue_id> (if issues are in the same repo)`;
       await commentOnPr(octokit, prContext, body, dryRun);
       logger.warn(`Targets parsing failed: ${targetResult.error}`);
       return;

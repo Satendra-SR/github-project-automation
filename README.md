@@ -17,15 +17,23 @@ Reusable GitHub Action to automate cross-repo PR + Issue + Projects V2 workflows
 
 ## Usage
 
+## Prerequisites
+- A pull request template that includes a Targets line:
+  - `Targets: owner/repo#<issue_id>` (cross-repo)
+  - `Targets: #<issue_id>` (same-repo)
+- A GitHub Project V2 with a single-select Status field and options matching your config.
+- Repository files:
+  - `.github/automation.yml`
+  - `.github/workflows/pr_automation.yml`
+
 ## Setup (Consuming Repo)
-1. Create a fine-grained PAT (recommended):
-   - Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens
-   - Resource owner: your organization or user
-   - Repository access: only select the PR repo and the Issue/Project repo
-   - Permissions:
-     - Pull requests: Read & write (PR repo)
-     - Issues: Read & write (Issue repo)
-     - Projects: Read & write (org/user Projects V2)
+1. Create a **classic PAT** (recommended, works reliably with Projects V2):
+   - Settings -> Developer settings -> Personal access tokens -> Tokens (classic)
+   - Scopes:
+     - `repo`
+     - `read:project`
+     - `write:project`
+   Note: We tried fine-grained PATs, but Projects permissions are not always available there. Classic PATs work consistently for Projects V2.
 2. Add the token as a secret in the PR repo:
    - Secret name: `GH_AUTOMATION_TOKEN`
 3. Add `.github/automation.yml` and `.github/workflows/pr_automation.yml` (examples below).
@@ -115,6 +123,8 @@ This format is intentionally strict. The action will only accept a `Targets` lin
 Supported whitespace variants:
 - `Targets:coloredcow-admin/sneha-lms#123`
 - `Targets: coloredcow-admin/sneha-lms #123`
+For same-repo cases, a short format is also accepted:
+- `Targets: #123`
 
 If missing or invalid, the action comments on the PR and exits.
 

@@ -4,7 +4,8 @@ export interface TargetIssue {
   number: number;
 }
 
-const TARGETS_REGEX = /^\s*Targets:\s*([^\s#/]+)\/([^\s#]+)\s*#\s*(\d+)\s*$/im;
+const TARGETS_FULL_REGEX = /^\s*Targets:\s*([^\s#/]+)\/([^\s#]+)\s*#\s*(\d+)\s*$/im;
+const TARGETS_SHORT_REGEX = /^\s*Targets:\s*#\s*(\d+)\s*$/im;
 
 export function parseTargets(
   body: string | null | undefined,
@@ -15,14 +16,16 @@ export function parseTargets(
     return { error: "PR body is empty" };
   }
 
-  const match = body.match(TARGETS_REGEX);
-  if (!match) {
+  const fullMatch = body.match(TARGETS_FULL_REGEX);
+  const shortMatch = body.match(TARGETS_SHORT_REGEX);
+
+  if (!fullMatch && !shortMatch) {
     return { error: "Missing Targets line" };
   }
 
-  const owner = match[1];
-  const repo = match[2];
-  const number = Number(match[3]);
+  const owner = fullMatch ? fullMatch[1] : expectedOwner;
+  const repo = fullMatch ? fullMatch[2] : expectedRepo;
+  const number = Number(fullMatch ? fullMatch[3] : shortMatch?.[1]);
 
   if (!Number.isInteger(number) || number <= 0) {
     return { error: "Invalid issue number in Targets line" };

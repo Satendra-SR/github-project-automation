@@ -8,8 +8,8 @@ project:
   status_order:
     - Backlog
     - Ready
-    - On Hold
-    - In Progress
+    - On hold
+    - In progress
     - In review
     - QA
     - Completed
@@ -24,7 +24,7 @@ rules:
       actions: [opened, synchronize]
     do:
       - ensure_issue_in_project: true
-      - ensure_status_at_least: In Progress
+      - ensure_status_at_least: In progress
       - audit_on_change: true
   - on:
       event: pull_request
