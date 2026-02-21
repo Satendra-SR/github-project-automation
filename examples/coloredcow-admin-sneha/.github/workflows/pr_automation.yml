@@ -3,6 +3,8 @@ name: PR Automation
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, review_requested]
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: read

@@ -14,7 +14,9 @@ const config: AutomationConfig = {
     status_order: ["Backlog", "Ready", "In Progress", "In review", "Completed"]
   },
   labels: {
-    ready_for_review: "Ready For Review"
+    ready_for_review: "Ready For Review",
+    reviewed: "status : reviewed",
+    reviewed_any: ["status : reviewed", "Reviewed"]
   },
   rules: [
     {
@@ -50,5 +52,27 @@ describe("buildActionPlan", () => {
     const plan = buildActionPlan(noAssignConfig, "pull_request", "synchronize");
     expect(plan).not.toBeNull();
     expect(plan?.assignIssueToPrAuthor).toBe(false);
+  });
+
+  it("maps remove_pr_labels_if_present from config rules", () => {
+    const removeLabelConfig: AutomationConfig = {
+      ...config,
+      rules: [
+        {
+          on: {
+            event: "pull_request_review",
+            actions: ["submitted"]
+          },
+          do: [
+            { remove_pr_labels_if_present: ["Ready For Review", "status: ready for review"] },
+            { add_pr_label_if_missing: "status : reviewed" }
+          ]
+        }
+      ]
+    };
+    const plan = buildActionPlan(removeLabelConfig, "pull_request_review", "submitted");
+    expect(plan).not.toBeNull();
+    expect(plan?.removePrLabelsIfPresent).toEqual(["Ready For Review", "status: ready for review"]);
+    expect(plan?.addPrLabelIfMissing).toBe("status : reviewed");
   });
 });

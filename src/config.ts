@@ -18,6 +18,8 @@ export interface ProjectConfig {
 export interface LabelsConfig {
   ready_for_review: string;
   ready_for_review_any?: string[];
+  reviewed?: string;
+  reviewed_any?: string[];
 }
 
 export interface RuleOnConfig {
@@ -29,6 +31,7 @@ export type RuleDoItem =
   | { ensure_issue_in_project: boolean }
   | { ensure_status_at_least: string }
   | { add_pr_label_if_missing: string }
+  | { remove_pr_labels_if_present: string[] }
   | { assign_issue_to_pr_author: boolean }
   | { audit_on_change: boolean };
 
@@ -109,6 +112,10 @@ export function loadConfig(configPath: string): AutomationConfig {
       ready_for_review: assertString(labels.ready_for_review, "labels.ready_for_review"),
       ready_for_review_any: labels.ready_for_review_any
         ? assertStringArray(labels.ready_for_review_any, "labels.ready_for_review_any")
+        : undefined,
+      reviewed: labels.reviewed ? assertString(labels.reviewed, "labels.reviewed") : undefined,
+      reviewed_any: labels.reviewed_any
+        ? assertStringArray(labels.reviewed_any, "labels.reviewed_any")
         : undefined
     },
     rules: Array.isArray(rules)

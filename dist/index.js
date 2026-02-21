@@ -26182,7 +26182,9 @@ function loadConfig(configPath) {
     },
     labels: {
       ready_for_review: assertString(labels.ready_for_review, "labels.ready_for_review"),
-      ready_for_review_any: labels.ready_for_review_any ? assertStringArray(labels.ready_for_review_any, "labels.ready_for_review_any") : void 0
+      ready_for_review_any: labels.ready_for_review_any ? assertStringArray(labels.ready_for_review_any, "labels.ready_for_review_any") : void 0,
+      reviewed: labels.reviewed ? assertString(labels.reviewed, "labels.reviewed") : void 0,
+      reviewed_any: labels.reviewed_any ? assertStringArray(labels.reviewed_any, "labels.reviewed_any") : void 0
     },
     rules: Array.isArray(rules) ? rules.map((rule, index) => {
       const ruleObj = assertObject(rule, `rules[${index}]`);
@@ -26232,6 +26234,9 @@ function maxStatus(order, a, b) {
 function applyDoItem(plan, item, statusOrder) {
   if ("add_pr_label_if_missing" in item) {
     return { ...plan, addPrLabelIfMissing: item.add_pr_label_if_missing };
+  }
+  if ("remove_pr_labels_if_present" in item) {
+    return { ...plan, removePrLabelsIfPresent: item.remove_pr_labels_if_present };
   }
   if ("assign_issue_to_pr_author" in item) {
     return { ...plan, assignIssueToPrAuthor: Boolean(item.assign_issue_to_pr_author) };
@@ -26354,6 +26359,45 @@ async function addLabelIfMissing(octokit, pr, label, dryRun, existingLabels) {
     "addLabel"
   );
   return true;
+}
+function isNotFoundError(error2) {
+  if (!error2 || typeof error2 !== "object") return false;
+  return error2.status === 404;
+}
+async function removeLabelsIfPresent(octokit, pr, labels, dryRun) {
+  const labelsToRemove = labels.filter(
+    (label) => pr.labels.map((name) => name.toLowerCase()).includes(label.toLowerCase())
+  );
+  if (labelsToRemove.length === 0) {
+    logger.info("No matching labels to remove");
+    return false;
+  }
+  if (dryRun) {
+    logger.info(`[dry-run] Would remove labels: ${labelsToRemove.join(", ")}`);
+    return false;
+  }
+  let removedAny = false;
+  for (const label of labelsToRemove) {
+    try {
+      await withRetry(
+        () => octokit.rest.issues.removeLabel({
+          owner: pr.owner,
+          repo: pr.repo,
+          issue_number: pr.number,
+          name: label
+        }),
+        "removeLabel"
+      );
+      removedAny = true;
+    } catch (error2) {
+      if (isNotFoundError(error2)) {
+        logger.info(`Label not found while removing: ${label}`);
+        continue;
+      }
+      throw error2;
+    }
+  }
+  return removedAny;
 }
 async function commentOnPr(octokit, pr, body, dryRun) {
   if (dryRun) {
@@ -26749,7 +26793,8 @@ async function run() {
     const config = loadConfig(configPath);
     const octokit = getOctokit(token);
     const context3 = context2;
-    if (context3.eventName !== "pull_request") {
+    const supportedEvents = ["pull_request", "pull_request_review"];
+    if (!supportedEvents.includes(context3.eventName)) {
       logger.info(`Unsupported event: ${context3.eventName}`);
       return;
     }
@@ -26764,6 +26809,14 @@ async function run() {
       logger.info(`No matching rules for ${context3.eventName}/${action}`);
       return;
     }
+    if (context3.eventName === "pull_request_review" && action === "submitted") {
+      const reviewState = payload.review?.state;
+      const shouldProcess = reviewState === "approved" || reviewState === "changes_requested";
+      if (!shouldProcess) {
+        logger.info(`Skipping review state: ${reviewState || "(unknown)"}`);
+        return;
+      }
+    }
     const prContext = {
       owner: context3.repo.owner,
       repo: context3.repo.repo,
@@ -26771,40 +26824,55 @@ async function run() {
       url: pr.html_url,
       labels: (pr.labels || []).map((label) => label.name)
     };
-    const targetResult = parseTargets(pr.body, config.issue_repo.owner, config.issue_repo.name);
-    if (!targetResult.target) {
-      const body = `\u26A0\uFE0F Automation: Missing Targets line.
+    const requiresTargetIssue = plan.assignIssueToPrAuthor || plan.ensureIssueInProject || Boolean(plan.ensureStatusAtLeast) || plan.auditOnChange;
+    let issueContext = null;
+    if (requiresTargetIssue) {
+      const targetResult = parseTargets(pr.body, config.issue_repo.owner, config.issue_repo.name);
+      if (!targetResult.target) {
+        const body = `\u26A0\uFE0F Automation: Missing Targets line.
 Please add one of:
 - Targets: ${config.issue_repo.owner}/${config.issue_repo.name}#<issue_id>
 - Targets: #<issue_id> (if issues are in the same repo)`;
-      await commentOnPr(octokit, prContext, body, dryRun);
-      logger.warn(`Targets parsing failed: ${targetResult.error}`);
-      return;
+        await commentOnPr(octokit, prContext, body, dryRun);
+        logger.warn(`Targets parsing failed: ${targetResult.error}`);
+        return;
+      }
+      const issueNumber = targetResult.target.number;
+      setOutput("issue_number", issueNumber.toString());
+      issueContext = await getIssueContext(
+        octokit,
+        config.issue_repo.owner,
+        config.issue_repo.name,
+        issueNumber
+      );
     }
-    const issueNumber = targetResult.target.number;
-    setOutput("issue_number", issueNumber.toString());
-    const issueContext = await getIssueContext(
-      octokit,
-      config.issue_repo.owner,
-      config.issue_repo.name,
-      issueNumber
-    );
     let didLabelChange = false;
     let didIssueAssignmentChange = false;
     let didStatusChange = false;
     const targetStatus = plan.ensureStatusAtLeast || "";
     let previousStatus = null;
     let newStatus = null;
+    if (plan.removePrLabelsIfPresent && plan.removePrLabelsIfPresent.length > 0) {
+      const removedAny = await removeLabelsIfPresent(
+        octokit,
+        prContext,
+        plan.removePrLabelsIfPresent,
+        dryRun
+      );
+      didLabelChange = didLabelChange || removedAny;
+    }
     if (plan.addPrLabelIfMissing) {
-      didLabelChange = await addLabelIfMissing(
+      const existingLabels = plan.addPrLabelIfMissing === config.labels.ready_for_review ? config.labels.ready_for_review_any : plan.addPrLabelIfMissing === config.labels.reviewed ? config.labels.reviewed_any : void 0;
+      const addedAny = await addLabelIfMissing(
         octokit,
         prContext,
         plan.addPrLabelIfMissing,
         dryRun,
-        config.labels.ready_for_review_any
+        existingLabels
       );
+      didLabelChange = didLabelChange || addedAny;
     }
-    if (plan.assignIssueToPrAuthor) {
+    if (plan.assignIssueToPrAuthor && issueContext) {
       didIssueAssignmentChange = await assignIssueToUserIfMissing(
         octokit,
         issueContext,
@@ -26812,7 +26880,7 @@ Please add one of:
         dryRun
       );
     }
-    if (plan.ensureIssueInProject || plan.ensureStatusAtLeast) {
+    if ((plan.ensureIssueInProject || plan.ensureStatusAtLeast) && issueContext) {
       const { itemId, currentStatus } = await ensureIssueInProjectAndGetStatus(
         octokit,
         config,
@@ -26836,7 +26904,7 @@ Please add one of:
         newStatus = result.newStatus;
       }
     }
-    if (plan.auditOnChange) {
+    if (plan.auditOnChange && issueContext) {
       const trigger = `${context3.eventName}/${action}`;
       const repoRef = `${context3.repo.owner}/${context3.repo.repo}`;
       if (didLabelChange) {

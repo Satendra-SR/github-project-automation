@@ -3,7 +3,7 @@ import * as github from "@actions/github";
 import { loadConfig } from "./config";
 import { buildActionPlan } from "./rules/router";
 import { parseTargets } from "./github/targets";
-import { addLabelIfMissing, commentOnPr } from "./github/pr";
+import { addLabelIfMissing, commentOnPr, removeLabelsIfPresent } from "./github/pr";
 import { assignIssueToUserIfMissing, commentOnIssue, getIssueContext } from "./github/issue";
 import { ensureIssueInProjectAndGetStatus, ensureStatusAtLeast } from "./github/projectsV2";
 import { logger } from "./logger";
@@ -42,7 +42,8 @@ async function run(): Promise<void> {
     const octokit = github.getOctokit(token);
     const context = github.context;
 
-    if (context.eventName !== "pull_request") {
+    const supportedEvents = ["pull_request", "pull_request_review"];
+    if (!supportedEvents.includes(context.eventName)) {
       logger.info(`Unsupported event: ${context.eventName}`);
       return;
     }
@@ -61,6 +62,15 @@ async function run(): Promise<void> {
       return;
     }
 
+    if (context.eventName === "pull_request_review" && action === "submitted") {
+      const reviewState = payload.review?.state as string | undefined;
+      const shouldProcess = reviewState === "approved" || reviewState === "changes_requested";
+      if (!shouldProcess) {
+        logger.info(`Skipping review state: ${reviewState || "(unknown)"}`);
+        return;
+      }
+    }
+
     const prContext = {
       owner: context.repo.owner,
       repo: context.repo.repo,
@@ -69,28 +79,38 @@ async function run(): Promise<void> {
       labels: (pr.labels || []).map((label: any) => label.name)
     };
 
-    const targetResult = parseTargets(pr.body, config.issue_repo.owner, config.issue_repo.name);
-    if (!targetResult.target) {
-      const body =
-        "⚠️ Automation: Missing Targets line.\n" +
-        `Please add one of:\n` +
-        `- Targets: ${config.issue_repo.owner}/${config.issue_repo.name}#<issue_id>\n` +
-        `- Targets: #<issue_id> (if issues are in the same repo)`;
+    const requiresTargetIssue =
+      plan.assignIssueToPrAuthor ||
+      plan.ensureIssueInProject ||
+      Boolean(plan.ensureStatusAtLeast) ||
+      plan.auditOnChange;
 
-      await commentOnPr(octokit, prContext, body, dryRun);
-      logger.warn(`Targets parsing failed: ${targetResult.error}`);
-      return;
+    let issueContext: Awaited<ReturnType<typeof getIssueContext>> | null = null;
+
+    if (requiresTargetIssue) {
+      const targetResult = parseTargets(pr.body, config.issue_repo.owner, config.issue_repo.name);
+      if (!targetResult.target) {
+        const body =
+          "⚠️ Automation: Missing Targets line.\n" +
+          `Please add one of:\n` +
+          `- Targets: ${config.issue_repo.owner}/${config.issue_repo.name}#<issue_id>\n` +
+          `- Targets: #<issue_id> (if issues are in the same repo)`;
+
+        await commentOnPr(octokit, prContext, body, dryRun);
+        logger.warn(`Targets parsing failed: ${targetResult.error}`);
+        return;
+      }
+
+      const issueNumber = targetResult.target.number;
+      core.setOutput("issue_number", issueNumber.toString());
+
+      issueContext = await getIssueContext(
+        octokit,
+        config.issue_repo.owner,
+        config.issue_repo.name,
+        issueNumber
+      );
     }
-
-    const issueNumber = targetResult.target.number;
-    core.setOutput("issue_number", issueNumber.toString());
-
-    const issueContext = await getIssueContext(
-      octokit,
-      config.issue_repo.owner,
-      config.issue_repo.name,
-      issueNumber
-    );
 
     let didLabelChange = false;
     let didIssueAssignmentChange = false;
@@ -99,17 +119,34 @@ async function run(): Promise<void> {
     let previousStatus: string | null = null;
     let newStatus: string | null = null;
 
+    if (plan.removePrLabelsIfPresent && plan.removePrLabelsIfPresent.length > 0) {
+      const removedAny = await removeLabelsIfPresent(
+        octokit,
+        prContext,
+        plan.removePrLabelsIfPresent,
+        dryRun
+      );
+      didLabelChange = didLabelChange || removedAny;
+    }
+
     if (plan.addPrLabelIfMissing) {
-      didLabelChange = await addLabelIfMissing(
+      const existingLabels =
+        plan.addPrLabelIfMissing === config.labels.ready_for_review
+          ? config.labels.ready_for_review_any
+          : plan.addPrLabelIfMissing === config.labels.reviewed
+            ? config.labels.reviewed_any
+            : undefined;
+      const addedAny = await addLabelIfMissing(
         octokit,
         prContext,
         plan.addPrLabelIfMissing,
         dryRun,
-        config.labels.ready_for_review_any
+        existingLabels
       );
+      didLabelChange = didLabelChange || addedAny;
     }
 
-    if (plan.assignIssueToPrAuthor) {
+    if (plan.assignIssueToPrAuthor && issueContext) {
       didIssueAssignmentChange = await assignIssueToUserIfMissing(
         octokit,
         issueContext,
@@ -118,7 +155,7 @@ async function run(): Promise<void> {
       );
     }
 
-    if (plan.ensureIssueInProject || plan.ensureStatusAtLeast) {
+    if ((plan.ensureIssueInProject || plan.ensureStatusAtLeast) && issueContext) {
       const { itemId, currentStatus } = await ensureIssueInProjectAndGetStatus(
         octokit,
         config,
@@ -144,7 +181,7 @@ async function run(): Promise<void> {
       }
     }
 
-    if (plan.auditOnChange) {
+    if (plan.auditOnChange && issueContext) {
       const trigger = `${context.eventName}/${action}`;
       const repoRef = `${context.repo.owner}/${context.repo.repo}`;
 

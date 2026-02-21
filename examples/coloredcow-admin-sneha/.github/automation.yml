@@ -18,6 +18,10 @@ labels:
   ready_for_review_any:
     - Ready For Review
     - "status: ready for review"
+  reviewed: "status : reviewed"
+  reviewed_any:
+    - "status : reviewed"
+    - Reviewed
 rules:
   - on:
       event: pull_request
@@ -39,3 +43,11 @@ rules:
       - ensure_issue_in_project: true
       - ensure_status_at_least: In review
       - audit_on_change: true
+  - on:
+      event: pull_request_review
+      actions: [submitted]
+    do:
+      - remove_pr_labels_if_present:
+          - Ready For Review
+          - "status: ready for review"
+      - add_pr_label_if_missing: "status : reviewed"

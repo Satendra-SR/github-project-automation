@@ -8,6 +8,9 @@ Reusable GitHub Action to automate cross-repo PR + Issue + Projects V2 workflows
   - Parse `Targets: coloredcow-admin/sneha-lms#<issue_id>` from PR body
   - Move Issue to `In review` in Project V2 `SNEHA LMS`
   - Audit comments on the Issue for changes that occurred
+- On PR review `submitted` with state `approved` or `changes_requested`
+  - Remove any configured ready-for-review label from the PR
+  - Add reviewed label `status : reviewed` (if missing)
 - On PR `opened` or `synchronize`
   - Optionally self-assign the targeted issue to the PR author (without removing existing assignees)
   - Move Issue to `In Progress` if not already at/after `In review`
@@ -46,6 +49,8 @@ name: PR Automation
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, review_requested]
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: read
@@ -87,6 +92,10 @@ labels:
   ready_for_review_any:
     - Ready For Review
     - "status: ready for review"
+  reviewed: "status : reviewed"
+  reviewed_any:
+    - "status : reviewed"
+    - Reviewed
 rules:
   - on:
       event: pull_request
@@ -108,6 +117,14 @@ rules:
       - ensure_issue_in_project: true
       - ensure_status_at_least: In review
       - audit_on_change: true
+  - on:
+      event: pull_request_review
+      actions: [submitted]
+    do:
+      - remove_pr_labels_if_present:
+          - Ready For Review
+          - "status: ready for review"
+      - add_pr_label_if_missing: "status : reviewed"
 ```
 
 `assign_issue_to_pr_author` adds the PR author to the issue assignees list only if not already assigned. Existing assignees are preserved.

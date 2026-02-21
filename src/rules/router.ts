@@ -6,6 +6,9 @@ function applyDoItem(plan: ActionPlan, item: RuleDoItem, statusOrder: string[]):
   if ("add_pr_label_if_missing" in item) {
     return { ...plan, addPrLabelIfMissing: item.add_pr_label_if_missing };
   }
+  if ("remove_pr_labels_if_present" in item) {
+    return { ...plan, removePrLabelsIfPresent: item.remove_pr_labels_if_present };
+  }
   if ("assign_issue_to_pr_author" in item) {
     return { ...plan, assignIssueToPrAuthor: Boolean(item.assign_issue_to_pr_author) };
   }
