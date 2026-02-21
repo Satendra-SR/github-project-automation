@@ -26233,6 +26233,9 @@ function applyDoItem(plan, item, statusOrder) {
   if ("add_pr_label_if_missing" in item) {
     return { ...plan, addPrLabelIfMissing: item.add_pr_label_if_missing };
   }
+  if ("assign_issue_to_pr_author" in item) {
+    return { ...plan, assignIssueToPrAuthor: Boolean(item.assign_issue_to_pr_author) };
+  }
   if ("ensure_issue_in_project" in item) {
     return { ...plan, ensureIssueInProject: Boolean(item.ensure_issue_in_project) };
   }
@@ -26256,6 +26259,7 @@ function buildActionPlan(config, eventName, action) {
   );
   if (rules.length === 0) return null;
   const initial = {
+    assignIssueToPrAuthor: false,
     ensureIssueInProject: false,
     auditOnChange: false
   };
@@ -26382,8 +26386,47 @@ async function getIssueContext(octokit, owner, repo, number) {
     repo,
     number,
     nodeId: response.data.node_id,
-    url: response.data.html_url
+    url: response.data.html_url,
+    assignees: (response.data.assignees || []).map((assignee) => assignee.login).filter((login) => Boolean(login))
   };
+}
+function isUnassignableUserError(error2) {
+  if (!error2 || typeof error2 !== "object") return false;
+  return error2.status === 422;
+}
+async function assignIssueToUserIfMissing(octokit, issue2, assignee, dryRun) {
+  const assigneeLogin = assignee?.trim();
+  if (!assigneeLogin) {
+    logger.warn("Skipping issue self-assignment: missing PR author login");
+    return false;
+  }
+  const alreadyAssigned = issue2.assignees.map((login) => login.toLowerCase()).includes(assigneeLogin.toLowerCase());
+  if (alreadyAssigned) {
+    logger.info(`Issue already assigned to ${assigneeLogin}`);
+    return false;
+  }
+  if (dryRun) {
+    logger.info(`[dry-run] Would assign issue to ${assigneeLogin}`);
+    return false;
+  }
+  try {
+    await withRetry(
+      () => octokit.rest.issues.addAssignees({
+        owner: issue2.owner,
+        repo: issue2.repo,
+        issue_number: issue2.number,
+        assignees: [assigneeLogin]
+      }),
+      "assignIssueToPrAuthor"
+    );
+    return true;
+  } catch (error2) {
+    if (isUnassignableUserError(error2)) {
+      logger.warn(`Could not assign ${assigneeLogin} to ${issue2.owner}/${issue2.repo}#${issue2.number}`);
+      return false;
+    }
+    throw error2;
+  }
 }
 async function commentOnIssue(octokit, issue2, body, dryRun) {
   if (dryRun) {
@@ -26747,6 +26790,7 @@ Please add one of:
       issueNumber
     );
     let didLabelChange = false;
+    let didIssueAssignmentChange = false;
     let didStatusChange = false;
     const targetStatus = plan.ensureStatusAtLeast || "";
     let previousStatus = null;
@@ -26758,6 +26802,14 @@ Please add one of:
         plan.addPrLabelIfMissing,
         dryRun,
         config.labels.ready_for_review_any
+      );
+    }
+    if (plan.assignIssueToPrAuthor) {
+      didIssueAssignmentChange = await assignIssueToUserIfMissing(
+        octokit,
+        issueContext,
+        pr.user?.login,
+        dryRun
       );
     }
     if (plan.ensureIssueInProject || plan.ensureStatusAtLeast) {
@@ -26790,6 +26842,15 @@ Please add one of:
       if (didLabelChange) {
         const comment = formatAuditComment({
           change: `Label added: ${plan.addPrLabelIfMissing}`,
+          trigger,
+          prUrl: prContext.url,
+          repo: repoRef
+        });
+        await commentOnIssue(octokit, issueContext, comment, dryRun);
+      }
+      if (didIssueAssignmentChange) {
+        const comment = formatAuditComment({
+          change: `Issue assignee added: ${pr.user?.login}`,
           trigger,
           prUrl: prContext.url,
           repo: repoRef

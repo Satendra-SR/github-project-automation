@@ -6,6 +6,9 @@ function applyDoItem(plan: ActionPlan, item: RuleDoItem, statusOrder: string[]):
   if ("add_pr_label_if_missing" in item) {
     return { ...plan, addPrLabelIfMissing: item.add_pr_label_if_missing };
   }
+  if ("assign_issue_to_pr_author" in item) {
+    return { ...plan, assignIssueToPrAuthor: Boolean(item.assign_issue_to_pr_author) };
+  }
   if ("ensure_issue_in_project" in item) {
     return { ...plan, ensureIssueInProject: Boolean(item.ensure_issue_in_project) };
   }
@@ -36,6 +39,7 @@ export function buildActionPlan(
   if (rules.length === 0) return null;
 
   const initial: ActionPlan = {
+    assignIssueToPrAuthor: false,
     ensureIssueInProject: false,
     auditOnChange: false
   };

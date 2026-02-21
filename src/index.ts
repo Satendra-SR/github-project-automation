@@ -4,7 +4,7 @@ import { loadConfig } from "./config";
 import { buildActionPlan } from "./rules/router";
 import { parseTargets } from "./github/targets";
 import { addLabelIfMissing, commentOnPr } from "./github/pr";
-import { commentOnIssue, getIssueContext } from "./github/issue";
+import { assignIssueToUserIfMissing, commentOnIssue, getIssueContext } from "./github/issue";
 import { ensureIssueInProjectAndGetStatus, ensureStatusAtLeast } from "./github/projectsV2";
 import { logger } from "./logger";
 
@@ -93,6 +93,7 @@ async function run(): Promise<void> {
     );
 
     let didLabelChange = false;
+    let didIssueAssignmentChange = false;
     let didStatusChange = false;
     const targetStatus = plan.ensureStatusAtLeast || "";
     let previousStatus: string | null = null;
@@ -105,6 +106,15 @@ async function run(): Promise<void> {
         plan.addPrLabelIfMissing,
         dryRun,
         config.labels.ready_for_review_any
+      );
+    }
+
+    if (plan.assignIssueToPrAuthor) {
+      didIssueAssignmentChange = await assignIssueToUserIfMissing(
+        octokit,
+        issueContext,
+        pr.user?.login,
+        dryRun
       );
     }
 
@@ -141,6 +151,16 @@ async function run(): Promise<void> {
       if (didLabelChange) {
         const comment = formatAuditComment({
           change: `Label added: ${plan.addPrLabelIfMissing}`,
+          trigger,
+          prUrl: prContext.url,
+          repo: repoRef
+        });
+        await commentOnIssue(octokit, issueContext, comment, dryRun);
+      }
+
+      if (didIssueAssignmentChange) {
+        const comment = formatAuditComment({
+          change: `Issue assignee added: ${pr.user?.login}`,
           trigger,
           prUrl: prContext.url,
           repo: repoRef

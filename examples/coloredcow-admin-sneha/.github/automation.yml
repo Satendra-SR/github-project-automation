@@ -21,6 +21,11 @@ labels:
 rules:
   - on:
       event: pull_request
+      actions: [opened]
+    do:
+      - assign_issue_to_pr_author: true
+  - on:
+      event: pull_request
       actions: [opened, synchronize]
     do:
       - ensure_issue_in_project: true

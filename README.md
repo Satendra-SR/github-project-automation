@@ -9,6 +9,7 @@ Reusable GitHub Action to automate cross-repo PR + Issue + Projects V2 workflows
   - Move Issue to `In review` in Project V2 `SNEHA LMS`
   - Audit comments on the Issue for changes that occurred
 - On PR `opened` or `synchronize`
+  - Optionally self-assign the targeted issue to the PR author (without removing existing assignees)
   - Move Issue to `In Progress` if not already at/after `In review`
   - Audit comments only if status changed
 - If Issue is not in the Project, add it first
@@ -89,6 +90,11 @@ labels:
 rules:
   - on:
       event: pull_request
+      actions: [opened]
+    do:
+      - assign_issue_to_pr_author: true
+  - on:
+      event: pull_request
       actions: [opened, synchronize]
     do:
       - ensure_issue_in_project: true
@@ -103,6 +109,8 @@ rules:
       - ensure_status_at_least: In review
       - audit_on_change: true
 ```
+
+`assign_issue_to_pr_author` adds the PR author to the issue assignees list only if not already assigned. Existing assignees are preserved.
 
 ## Inputs
 - `token` (required): Token with cross-repo + Projects V2 permissions

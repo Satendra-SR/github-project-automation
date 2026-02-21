@@ -29,6 +29,7 @@ export type RuleDoItem =
   | { ensure_issue_in_project: boolean }
   | { ensure_status_at_least: string }
   | { add_pr_label_if_missing: string }
+  | { assign_issue_to_pr_author: boolean }
   | { audit_on_change: boolean };
 
 export interface RuleConfig {
