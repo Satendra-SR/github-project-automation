@@ -17,7 +17,7 @@ Reusable GitHub Action to automate cross-repo PR + Issue + Projects V2 workflows
   - Audit comments only if status changed
 - If Issue is not in the Project, add it first
 - No spam: comments are only posted when an actual change occurred
-- If Targets line is missing/invalid, comment on the PR and exit
+- If a matched rule needs issue/project actions and Targets is missing/invalid, comment on the PR and exit
 
 ## Usage
 
@@ -63,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run automation
-        uses: satendra-sr/github-project-automation@v1
+        uses: ColoredCow/github-project-automation@v1
         with:
           token: ${{ secrets.GH_AUTOMATION_TOKEN }}
           config-path: .github/automation.yml
@@ -137,11 +137,11 @@ rules:
 ## Outputs
 - `did_label_change`
 - `did_status_change`
-- `issue_number`
+- `issue_number` (set only when issue/project/audit behavior is executed)
 - `target_status`
 
 ## Targets line format
-Required in PR body:
+Required when matched rules include issue/project/audit behavior:
 ```
 Targets: coloredcow-admin/sneha-lms#123
 ```
@@ -152,7 +152,7 @@ Supported whitespace variants:
 For same-repo cases, a short format is also accepted:
 - `Targets: #123`
 
-If missing or invalid, the action comments on the PR and exits.
+If missing or invalid for those rules, the action comments on the PR and exits.
 
 ## Permissions / Token scopes
 `GITHUB_TOKEN` often lacks cross-repo + Projects V2 permissions. Use a secret token input named `GH_AUTOMATION_TOKEN`.

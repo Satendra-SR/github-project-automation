@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run automation
-        uses: satendra-sr/github-project-automation@v1
+        uses: ColoredCow/github-project-automation@v1
         with:
           token: ${{ secrets.GH_AUTOMATION_TOKEN }}
           config-path: .github/automation.yml

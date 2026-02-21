@@ -15,11 +15,11 @@ inputs:
     default: "false"
 outputs:
   did_label_change:
-    description: "Whether a PR label was added"
+    description: "Whether PR labels were changed (added or removed)"
   did_status_change:
     description: "Whether the Issue status was changed"
   issue_number:
-    description: "Target issue number"
+    description: "Target issue number (set only when issue/project actions run)"
   target_status:
     description: "Target status requested by rule"
 runs:
